@@ -8,15 +8,27 @@ import (
 )
 
 func serveFTP(port int) (net.Listener, error) {
-	return net.Listen("tcp", fmt.Sprintf("0.0.0.0:%v", port))
+	return net.Listen("tcp", fmt.Sprintf("%v:%v", hostAddress, port))
 }
 
-func translatePortCommand(cmd []byte) []byte {
+func translatePortCommand(cmd []byte) (command []byte, newPort, originalPort int, originalIP string) {
 	// PORT 127,0,0,1,234,229
 	extIP := strings.Split(*externalIP, ".")
 	ipPart := strings.Join(extIP, ",")
+	originalPort = parsePort(string(cmd))
+	newPort = originalPort + 1
+	portSection := convertPort(newPort)
+	command = []byte(fmt.Sprintf("PORT %v,%v\r\n", ipPart, portSection))
 	data := strings.Split(string(cmd), ",")
-	return []byte(fmt.Sprintf("PORT %v,%v,%v", ipPart, data[4], data[5]))
+	originalIP = fmt.Sprintf("%v.%v.%v.%v", strings.Split(data[0], " ")[1], data[1], data[2], data[3])
+	return
+}
+
+func convertPort(port int) string {
+	p1 := port / 256
+	p2 := port - (p1 * 256)
+
+	return fmt.Sprintf("%v,%v", p1, p2)
 }
 
 func parsePort(command string) int {
