@@ -8,7 +8,7 @@ import (
 )
 
 func serveFTP(port int) (net.Listener, error) {
-	return net.Listen("tcp", fmt.Sprintf("%v:%v", hostAddress, port))
+	return net.Listen("tcp", fmt.Sprintf("%v:%v", *hostAddress, port))
 }
 
 func translatePortCommand(cmd []byte) (command []byte, newPort, originalPort int, originalIP string) {

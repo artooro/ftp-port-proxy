@@ -2,8 +2,13 @@ package main
 
 import (
 	"flag"
-	"log"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 )
+
+const versionString = "0.1.2"
 
 var (
 	port        = flag.Int("host-port", 20021, "The port that this FTP proxy will serve on.")
@@ -11,22 +16,19 @@ var (
 	server      = flag.String("server", "", "The FTP server host or IP to connect to.")
 	serverPort  = flag.Int("server-port", 21, "The FTP server port number.")
 	externalIP  = flag.String("ext-ip", "", "The public IP to rewrite FTP port commands from.")
+	showVersion = flag.Bool("version", false, "Show version number")
 )
 
 func main() {
 	flag.Parse()
 
-	// Start internal server
-	l, err := serveFTP(*port)
-	if err != nil {
-		log.Fatalf("Unable to listen on port %d (err: %v)", *port, err)
+	if *showVersion {
+		fmt.Println("ftp-port-proxy:", versionString)
+		return
 	}
 
-	log.Printf("Serving on port %d", *port)
-
-	proxy := ftpProxy{
-		UpstreamServer: *server,
-		UpstreamPort:   *serverPort,
-	}
-	log.Fatal(proxy.listenAndServe(l))
+	s := &ftpProxy{}
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	s.Execute(c)
 }

@@ -7,9 +7,12 @@ import (
 )
 
 func connectServer(server string, port int) (net.Conn, error) {
-	addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%v:%d", server, port))
+	localAddress, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%v:%v", *hostAddress, "0"))
 	if err != nil {
 		log.Fatalf("Error resolving TCP address: %v", err)
 	}
-	return net.DialTCP("tcp", nil, addr)
+	dialer := net.Dialer{
+		LocalAddr: localAddress,
+	}
+	return dialer.Dial("tcp", fmt.Sprintf("%v:%d", server, port))
 }

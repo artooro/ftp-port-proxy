@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
 	"net"
+	"os"
 	"strings"
 )
 
@@ -16,7 +18,7 @@ type dataProxy struct {
 
 func (d *dataProxy) start(originalPort, newPort int, originalIP string) error {
 	// Listen for connections from upstream server on new port
-	l, err := net.Listen("tcp", fmt.Sprintf("%v:%v", hostAddress, newPort))
+	l, err := net.Listen("tcp", fmt.Sprintf("%v:%v", *hostAddress, newPort))
 	if err != nil {
 		return err
 	}
@@ -96,6 +98,28 @@ type ftpProxy struct {
 	rconn          io.ReadWriter
 }
 
+func (f *ftpProxy) Execute(signals chan os.Signal) {
+	l, err := serveFTP(*port)
+	if err != nil {
+		log.Fatalf("Unable to listen on port %v (err: %v)", *port, err)
+	}
+
+	f.UpstreamServer = *server
+	f.UpstreamPort = *serverPort
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go f.listenAndServe(ctx, l)
+
+	for {
+		select {
+		case <-signals:
+			cancel()
+			os.Exit(1)
+		}
+	}
+}
+
 func (f *ftpProxy) proxyData(lconn, rconn io.ReadWriter) {
 	buff := make([]byte, 4096)
 	for {
@@ -172,14 +196,20 @@ func (f *ftpProxy) err(err error) {
 	f.errsig <- err
 }
 
-func (f *ftpProxy) listenAndServe(l net.Listener) error {
+func (f *ftpProxy) listenAndServe(ctx context.Context, l net.Listener) error {
 	f.errsig = make(chan error, 2)
 
 	for {
-		c, err := l.Accept()
-		if err != nil {
-			return err
+		select {
+		case <-ctx.Done():
+			l.Close()
+			return nil
+		default:
+			c, err := l.Accept()
+			if err != nil {
+				return err
+			}
+			go f.handleConnection(c)
 		}
-		go f.handleConnection(c)
 	}
 }
