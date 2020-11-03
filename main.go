@@ -8,7 +8,7 @@ import (
 	"syscall"
 )
 
-const versionString = "0.1.2"
+const versionString = "0.1.3"
 
 var (
 	port        = flag.Int("host-port", 20021, "The port that this FTP proxy will serve on.")

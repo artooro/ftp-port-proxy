@@ -37,17 +37,16 @@ func (d *dataProxy) start(originalPort, newPort int, originalIP string) error {
 	return nil
 }
 
-func (d *dataProxy) serve(ready chan bool) {
+func (d *dataProxy) serve() {
 	log.Println("Waiting for data on", d.l.Addr().String())
-	for {
-		ready <- true
-		c, err := d.l.Accept()
-		if err != nil {
-			log.Printf("Error accepting data connection: %v", err)
-			return
-		}
-		go d.handleConnection(c)
+
+	c, err := d.l.Accept()
+	if err != nil {
+		log.Printf("Error accepting data connection: %v", err)
+		return
 	}
+	go d.handleConnection(c)
+
 }
 
 func (d *dataProxy) handleConnection(c net.Conn) {
@@ -65,9 +64,6 @@ func (d *dataProxy) handleConnection(c net.Conn) {
 }
 
 func (d *dataProxy) err(err error) {
-	if err != io.EOF {
-		log.Printf("Error: %v", err)
-	}
 	d.close <- err
 }
 
@@ -88,6 +84,7 @@ func (d *dataProxy) proxyData(lconn, rconn io.ReadWriter) {
 		}
 		log.Printf("Copied %d data bytes", n)
 	}
+
 }
 
 type ftpProxy struct {
@@ -122,6 +119,7 @@ func (f *ftpProxy) Execute(signals chan os.Signal) {
 
 func (f *ftpProxy) proxyData(lconn, rconn io.ReadWriter) {
 	buff := make([]byte, 4096)
+
 	for {
 		n, err := lconn.Read(buff)
 		if err != nil {
@@ -159,9 +157,8 @@ func (f *ftpProxy) translator(b []byte, w io.ReadWriter) (n int, err error) {
 			log.Println("Unable to start data listening connection on port", newPort)
 			return
 		}
-		readyToServe := make(chan bool)
-		go d.serve(readyToServe)
-		<-readyToServe
+
+		go d.serve()
 
 		log.Printf("Translated to: %v", strings.Trim(string(replacementCmd), "\n"))
 		return w.Write(replacementCmd)
@@ -169,19 +166,10 @@ func (f *ftpProxy) translator(b []byte, w io.ReadWriter) (n int, err error) {
 	return w.Write(b)
 }
 
-func (f *ftpProxy) handleConnection(lc net.Conn) {
+func (f *ftpProxy) handleConnection(lc, uc net.Conn) {
 	log.Printf("Accepted control connection from %v", lc.RemoteAddr())
 
-	// Start connection to upstream server
-	uc, err := connectServer(f.UpstreamServer, f.UpstreamPort)
-	if err != nil {
-		log.Printf("Failed to connect to upstream %v", f.UpstreamServer)
-		return
-	}
-
 	// Bidirectional proxy
-	f.lconn = lc
-	f.rconn = uc
 	go f.proxyData(lc, uc)
 	go f.proxyData(uc, lc)
 
@@ -209,7 +197,15 @@ func (f *ftpProxy) listenAndServe(ctx context.Context, l net.Listener) error {
 			if err != nil {
 				return err
 			}
-			go f.handleConnection(c)
+
+			// Start connection to upstream server
+			uc, err := connectServer(f.UpstreamServer, f.UpstreamPort)
+			if err != nil {
+				log.Printf("Failed to connect to upstream %v", f.UpstreamServer)
+				return err
+			}
+
+			go f.handleConnection(c, uc)
 		}
 	}
 }
