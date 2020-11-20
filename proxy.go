@@ -195,14 +195,15 @@ func (f *ftpProxy) listenAndServe(ctx context.Context, l net.Listener) error {
 		default:
 			c, err := l.Accept()
 			if err != nil {
-				return err
+				log.Printf("Error accepting connection: %v", err)
+				continue
 			}
 
 			// Start connection to upstream server
 			uc, err := connectServer(f.UpstreamServer, f.UpstreamPort)
 			if err != nil {
 				log.Printf("Failed to connect to upstream %v", f.UpstreamServer)
-				return err
+				continue
 			}
 
 			go f.handleConnection(c, uc)
