@@ -14,6 +14,14 @@ Usage of ./ftp-port-proxy:
         The FTP server host or IP to connect to.
   -server-port int
         The FTP server port number. (default 21)
+  -logtostderr=false
+        Logs are written to standard error instead of to files.
+  -stderrthreshold=ERROR
+        Log events at or above this severity are logged to standard
+        error as well as to files.
+  -log_dir=""
+        Log files will be written to this directory instead of the
+        default temporary directory.
   -version
         Show version number
 ```

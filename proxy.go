@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
 	"strings"
+
+	"github.com/golang/glog"
 )
 
 type dataProxy struct {
@@ -30,7 +31,7 @@ func (d *dataProxy) start(originalPort, newPort int, originalIP string) error {
 		return err
 	}
 	d.rconn = c
-	log.Println("Connected reverse proxy to", originalIP, originalPort)
+	glog.Infoln("Connected reverse proxy to", originalIP, originalPort)
 
 	d.close = make(chan error, 2)
 
@@ -38,11 +39,11 @@ func (d *dataProxy) start(originalPort, newPort int, originalIP string) error {
 }
 
 func (d *dataProxy) serve() {
-	log.Println("Waiting for data on", d.l.Addr().String())
+	glog.Infoln("Waiting for data on", d.l.Addr().String())
 
 	c, err := d.l.Accept()
 	if err != nil {
-		log.Printf("Error accepting data connection: %v", err)
+		glog.Infof("Error accepting data connection: %v", err)
 		return
 	}
 	go d.handleConnection(c)
@@ -53,14 +54,14 @@ func (d *dataProxy) handleConnection(c net.Conn) {
 	defer c.Close()
 	defer d.rconn.Close()
 	defer d.l.Close()
-	log.Printf("Accepted data connection from %v", c.RemoteAddr())
+	glog.Infof("Accepted data connection from %v", c.RemoteAddr())
 
 	// Bidirectional proxy
 	go d.proxyData(d.rconn, c)
 	go d.proxyData(c, d.rconn)
 	<-d.close
 
-	log.Printf("Closed connection from %v", c.RemoteAddr())
+	glog.Infof("Closed connection from %v", c.RemoteAddr())
 }
 
 func (d *dataProxy) err(err error) {
@@ -82,7 +83,7 @@ func (d *dataProxy) proxyData(lconn, rconn io.ReadWriter) {
 			d.err(err)
 			return
 		}
-		log.Printf("Copied %d data bytes", n)
+		glog.Infof("Copied %d data bytes", n)
 	}
 
 }
@@ -98,7 +99,7 @@ type ftpProxy struct {
 func (f *ftpProxy) Execute(signals chan os.Signal) {
 	l, err := serveFTP(*port)
 	if err != nil {
-		log.Fatalf("Unable to listen on port %v (err: %v)", *port, err)
+		glog.Fatalf("Unable to listen on port %v (err: %v)", *port, err)
 	}
 
 	f.UpstreamServer = *server
@@ -128,14 +129,14 @@ func (f *ftpProxy) proxyData(lconn, rconn io.ReadWriter) {
 		}
 		b := buff[:n]
 
-		log.Printf("Wrote: %s", b)
+		glog.Infof("Wrote: %s", b)
 
 		n, err = f.translator(b, rconn)
 		if err != nil {
 			f.err(err)
 			return
 		}
-		log.Printf("Copied %d bytes", n)
+		glog.Infof("Copied %d bytes", n)
 	}
 }
 
@@ -148,38 +149,38 @@ func (f *ftpProxy) translator(b []byte, w io.ReadWriter) (n int, err error) {
 	switch cmdStr {
 	case "PORT":
 		replacementCmd, newPort, originalPort, originalIP := translatePortCommand(b)
-		log.Println("Going to listen on port", newPort, "and proxy connection back to", originalIP, "on port", originalPort)
+		glog.Infof("Going to listen on port", newPort, "and proxy connection back to", originalIP, "on port", originalPort)
 
 		// Start data proxy
 		d := &dataProxy{}
 		err = d.start(originalPort, newPort, originalIP)
 		if err != nil {
-			log.Println("Unable to start data listening connection on port", newPort)
+			glog.Warningf("Unable to start data listening connection on port", newPort)
 			return
 		}
 
 		go d.serve()
 
-		log.Printf("Translated to: %v", strings.Trim(string(replacementCmd), "\n"))
+		glog.Infof("Translated to: %v", strings.Trim(string(replacementCmd), "\n"))
 		return w.Write(replacementCmd)
 	}
 	return w.Write(b)
 }
 
 func (f *ftpProxy) handleConnection(lc, uc net.Conn) {
-	log.Printf("Accepted control connection from %v", lc.RemoteAddr())
+	glog.Infof("Accepted control connection from %v", lc.RemoteAddr())
 
 	// Bidirectional proxy
 	go f.proxyData(lc, uc)
 	go f.proxyData(uc, lc)
 
 	<-f.errsig
-	log.Printf("Closed connection %v <> %v", lc.RemoteAddr(), uc.RemoteAddr())
+	glog.Warningf("Closed connection %v <> %v", lc.RemoteAddr(), uc.RemoteAddr())
 }
 
 func (f *ftpProxy) err(err error) {
 	if err != io.EOF {
-		log.Printf("Error: %v", err)
+		glog.Infof("Error: %v", err)
 	}
 	f.errsig <- err
 }
@@ -195,14 +196,14 @@ func (f *ftpProxy) listenAndServe(ctx context.Context, l net.Listener) error {
 		default:
 			c, err := l.Accept()
 			if err != nil {
-				log.Printf("Error accepting connection: %v", err)
+				glog.Errorf("Error accepting connection: %v", err)
 				continue
 			}
 
 			// Start connection to upstream server
 			uc, err := connectServer(f.UpstreamServer, f.UpstreamPort)
 			if err != nil {
-				log.Printf("Failed to connect to upstream %v", f.UpstreamServer)
+				glog.Errorf("Failed to connect to upstream %v", f.UpstreamServer)
 				continue
 			}
 

@@ -2,14 +2,15 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net"
+
+	"github.com/golang/glog"
 )
 
 func connectServer(server string, port int) (net.Conn, error) {
 	localAddress, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%v:%v", *hostAddress, "0"))
 	if err != nil {
-		log.Fatalf("Error resolving TCP address: %v", err)
+		glog.Fatalf("Error resolving TCP address: %v", err)
 	}
 	dialer := net.Dialer{
 		LocalAddr: localAddress,
